@@ -2,7 +2,6 @@ dist
 *classes
 *.class
 target/
-build/
 build_eclipse/
 out/
 .gradle/
