@@ -16,35 +16,41 @@
  */
 package org.apache.kafka.connect.mirror;
 
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.apache.kafka.common.MetricNameTemplate;
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.metrics.Measurable;
+import org.apache.kafka.common.metrics.MetricConfig;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.metrics.MetricsReporter;
 import org.apache.kafka.common.metrics.Sensor;
-import org.apache.kafka.common.metrics.stats.WindowedCount;
-import org.apache.kafka.common.metrics.stats.Value;
-import org.apache.kafka.common.metrics.stats.Rate;
-import org.apache.kafka.common.metrics.stats.Min;
-import org.apache.kafka.common.metrics.stats.Max;
 import org.apache.kafka.common.metrics.stats.Avg;
-import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.metrics.stats.Max;
+import org.apache.kafka.common.metrics.stats.Min;
+import org.apache.kafka.common.metrics.stats.Rate;
+import org.apache.kafka.common.metrics.stats.Value;
+import org.apache.kafka.common.metrics.stats.WindowedCount;
+import org.apache.kafka.connect.mirror.metrics.RiemannMetricPublisher;
+import org.apache.kafka.connect.source.SourceRecord;
 
-import java.util.Arrays;
-import java.util.Set;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.stream.Collectors;
-
-/** Metrics for replicated topic-partitions */
+/**
+ * Metrics for replicated topic-partitions
+ */
 class MirrorMetrics implements AutoCloseable {
 
     private static final String SOURCE_CONNECTOR_GROUP = MirrorSourceConnector.class.getSimpleName();
     private static final String CHECKPOINT_CONNECTOR_GROUP = MirrorCheckpointConnector.class.getSimpleName();
 
     private static final Set<String> PARTITION_TAGS = new HashSet<>(Arrays.asList("target", "topic", "partition"));
-    private static final Set<String> GROUP_TAGS = new HashSet<>(Arrays.asList("source", "target", "group", "topic", "partition"));
-    
+    private static final Set<String> GROUP_TAGS = new HashSet<>(
+            Arrays.asList("source", "target", "group", "topic", "partition"));
+
     private static final MetricNameTemplate RECORD_COUNT = new MetricNameTemplate(
             "record-count", SOURCE_CONNECTOR_GROUP,
             "Number of source records replicated to the target cluster.", PARTITION_TAGS);
@@ -90,18 +96,21 @@ class MirrorMetrics implements AutoCloseable {
             "Average time it takes consumer group offsets to replicate from source to target cluster.", GROUP_TAGS);
 
 
-    private final Metrics metrics; 
-    private final Map<TopicPartition, PartitionMetrics> partitionMetrics; 
+    private final Metrics metrics;
+    private final Map<TopicPartition, PartitionMetrics> partitionMetrics;
     private final Map<String, GroupMetrics> groupMetrics = new HashMap<>();
     private final String source;
     private final String target;
     private final Set<String> groups;
+    private final RiemannMetricPublisher riemannMetricPublisher;
 
     MirrorMetrics(MirrorTaskConfig taskConfig) {
         this.target = taskConfig.targetClusterAlias();
         this.source = taskConfig.sourceClusterAlias();
         this.groups = taskConfig.taskConsumerGroups();
         this.metrics = new Metrics();
+        this.riemannMetricPublisher = new RiemannMetricPublisher();
+        riemannMetricPublisher.startPublishing();
 
         // for side-effect
         metrics.sensor("record-count");
@@ -111,14 +120,15 @@ class MirrorMetrics implements AutoCloseable {
 
         ReplicationPolicy replicationPolicy = taskConfig.replicationPolicy();
         partitionMetrics = taskConfig.taskTopicPartitions().stream()
-            .map(x -> new TopicPartition(replicationPolicy.formatRemoteTopic(source, x.topic()), x.partition()))
-            .collect(Collectors.toMap(x -> x, x -> new PartitionMetrics(x)));
+                .map(x -> new TopicPartition(replicationPolicy.formatRemoteTopic(source, x.topic()), x.partition()))
+                .collect(Collectors.toMap(x -> x, x -> new PartitionMetrics(x)));
 
     }
 
     @Override
     public void close() {
         metrics.close();
+        riemannMetricPublisher.close();
     }
 
     void countRecord(TopicPartition topicPartition) {
@@ -129,12 +139,21 @@ class MirrorMetrics implements AutoCloseable {
         partitionMetrics.get(topicPartition).recordAgeSensor.record((double) ageMillis);
     }
 
-    void replicationLatency(TopicPartition topicPartition, long millis) {
+    void replicationLatency(TopicPartition topicPartition, long millis, SourceRecord record) {
+        riemannMetricPublisher.addReplicationLatencyMetric(topicPartition, record);
+        riemannMetricPublisher.addReplicationLatencyPerHostMetric(topicPartition, record);
+        riemannMetricPublisher.addLatency(topicPartition, record);
         partitionMetrics.get(topicPartition).replicationLatencySensor.record((double) millis);
     }
 
     void recordBytes(TopicPartition topicPartition, long bytes) {
+        Measurable metricValue = (MetricConfig config, long now) -> (double) bytes;
+        riemannMetricPublisher.addRecordBytesMetric(topicPartition, metricValue);
         partitionMetrics.get(topicPartition).byteRateSensor.record((double) bytes);
+    }
+
+    void recordOffset(TopicPartition topicPartition, SourceRecord record) {
+        riemannMetricPublisher.addOffsetMetric(topicPartition, record);
     }
 
     void checkpointLatency(TopicPartition topicPartition, String group, long millis) {
@@ -143,7 +162,7 @@ class MirrorMetrics implements AutoCloseable {
 
     GroupMetrics group(TopicPartition topicPartition, String group) {
         return groupMetrics.computeIfAbsent(String.join("-", topicPartition.toString(), group),
-            x -> new GroupMetrics(topicPartition, group));
+                x -> new GroupMetrics(topicPartition, group));
     }
 
     void addReporter(MetricsReporter reporter) {
@@ -151,17 +170,18 @@ class MirrorMetrics implements AutoCloseable {
     }
 
     private class PartitionMetrics {
+
         private final Sensor recordSensor;
         private final Sensor byteRateSensor;
         private final Sensor recordAgeSensor;
         private final Sensor replicationLatencySensor;
         private final TopicPartition topicPartition;
-     
+
         PartitionMetrics(TopicPartition topicPartition) {
             this.topicPartition = topicPartition;
 
             Map<String, String> tags = new LinkedHashMap<>();
-            tags.put("target", target); 
+            tags.put("target", target);
             tags.put("topic", topicPartition.topic());
             tags.put("partition", Integer.toString(topicPartition.partition()));
 

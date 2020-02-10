@@ -26,7 +26,7 @@ if [ "x$KAFKA_LOG4J_OPTS" = "x" ]; then
 fi
 
 if [ "x$KAFKA_HEAP_OPTS" = "x" ]; then
-    export KAFKA_HEAP_OPTS="-Xmx1G -Xms1G"
+    export KAFKA_HEAP_OPTS="-Xms2G -Xmx8G"
 fi
 
 EXTRA_ARGS=${EXTRA_ARGS-'-name kafkaServer -loggc'}
@@ -40,5 +40,7 @@ case $COMMAND in
   *)
     ;;
 esac
+
+export JMX_PORT=9010
 
 exec $base_dir/kafka-run-class.sh $EXTRA_ARGS kafka.Kafka "$@"

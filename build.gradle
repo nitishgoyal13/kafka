@@ -24,6 +24,9 @@ buildscript {
     maven {
       url "https://plugins.gradle.org/m2/"
     }
+    maven {
+      url "https://clojars.org/repo"
+    }
   }
   apply from: file('gradle/buildscript.gradle'), to: buildscript
   apply from: "$rootDir/gradle/dependencies.gradle"
@@ -37,27 +40,41 @@ buildscript {
     classpath "org.owasp:dependency-check-gradle:$versions.owaspDepCheckPlugin"
     classpath "com.diffplug.spotless:spotless-plugin-gradle:$versions.spotlessPlugin"
     classpath "gradle.plugin.com.github.spotbugs:spotbugs-gradle-plugin:$versions.spotbugsPlugin"
+    classpath 'com.netflix.nebula:nebula-clojure-plugin:4.0.1'
+    classpath 'clojuresque:clojuresque:1.7.0'
   }
 }
+
+apply plugin: 'nebula.clojure' // this is a wrapper around clojuresque to make it behave well with other plugins
 
 apply plugin: "com.diffplug.gradle.spotless"
 spotless {
   scala {
     target 'streams/**/*.scala'
-    scalafmt("$versions.scalafmt").configFile('checkstyle/.scalafmt.conf')
   }
 }
 
+repositories {
+  mavenCentral()
+  clojarsRepo()
+  maven {
+    url "https://clojars.org/repo"
+  }
+}
 
 allprojects {
 
   repositories {
     mavenCentral()
+    maven {
+      url "https://clojars.org/repo"
+    }
   }
   
   apply plugin: 'idea'
   apply plugin: 'org.owasp.dependencycheck'
   apply plugin: 'com.github.ben-manes.versions'
+  apply plugin: 'nebula.clojure' // this is a wrapper around clojuresque to make it behave well with other plugins
 
   dependencyUpdates {
     revision="release"
@@ -115,32 +132,6 @@ ext {
 
 apply from: file('wrapper.gradle')
 
-if (file('.git').exists()) {
-  apply from: file('gradle/rat.gradle')
-  rat {
-    // Exclude everything under the directory that git should be ignoring via .gitignore or that isn't checked in. These
-    // restrict us only to files that are checked in or are staged.
-    def repo = Grgit.open(currentDir: project.getRootDir())
-    excludes = new ArrayList<String>(repo.clean(ignore: false, directories: true, dryRun: true))
-    // And some of the files that we have checked in should also be excluded from this check
-    excludes.addAll([
-        '**/.git/**',
-        '**/build/**',
-        'CONTRIBUTING.md',
-        'PULL_REQUEST_TEMPLATE.md',
-        'gradlew',
-        'gradlew.bat',
-        'TROGDOR.md',
-        '**/README.md',
-        '**/id_rsa',
-        '**/id_rsa.pub',
-        'checkstyle/suppressions.xml',
-        'streams/quickstart/java/src/test/resources/projects/basic/goal.txt',
-        'streams/streams-scala/logs/*'
-    ])
-  }
-}
-
 
 subprojects {
   apply plugin: 'java'
@@ -151,7 +142,6 @@ subprojects {
   }
   apply plugin: 'maven'
   apply plugin: 'signing'
-  apply plugin: 'checkstyle'
   apply plugin: "com.github.spotbugs"
 
   sourceCompatibility = minJavaVersion
@@ -419,6 +409,22 @@ subprojects {
         "-Xlint:constant",
         "-Xlint:unused"
       ]
+
+      // Inline more aggressively when compiling the `core` jar since it's not meant to be used as a library.
+      // More specifically, inline classes from the Scala library so that we can inline methods like `Option.exists`
+      // and avoid lambda allocations. This is only safe if the Scala library version is the same at compile time
+      // and runtime. We cannot guarantee this for libraries like kafka streams, so only inline classes from the
+      // Kafka project in that case.
+      List<String> inlineFrom
+      if (project.name.equals('core'))
+        inlineFrom = ["-opt-inline-from:scala.**", "-opt-inline-from:kafka.**", "-opt-inline-from:org.apache.kafka.**"]
+      else
+        inlineFrom = ["-opt-inline-from:org.apache.kafka.**"]
+
+      // Somewhat confusingly, `-opt:l:inline` enables all optimizations. `inlineFrom` configures what can be inlined.
+      // See https://www.lightbend.com/blog/scala-inliner-optimizer for more information about the optimizer.
+      scalaCompileOptions.additionalParameters += ["-opt:l:inline"]
+      scalaCompileOptions.additionalParameters += inlineFrom
     }
     
   // these options are valid for Scala versions < 2.13 only
@@ -436,24 +442,6 @@ subprojects {
     }
   }
 
-  checkstyle {
-    configFile = new File(rootDir, "checkstyle/checkstyle.xml")
-    configProperties = checkstyleConfigProperties("import-control.xml")
-    toolVersion = "$versions.checkstyle"
-  }
-
-  configure(checkstyleMain) {
-    group = 'Verification'
-    description = 'Run checkstyle on all main Java sources'
-  }
-
-  configure(checkstyleTest) {
-    group = 'Verification'
-    description = 'Run checkstyle on all test Java sources'
-  }
-
-  test.dependsOn('checkstyleMain', 'checkstyleTest')
-
   spotbugs {
     toolVersion = "$versions.spotbugs"
     excludeFilter = file("$rootDir/gradle/spotbugs-exclude.xml")
@@ -467,6 +455,7 @@ subprojects {
       xml.enabled(project.hasProperty('xmlSpotBugsReport') || project.hasProperty('xmlFindBugsReport'))
       html.enabled(!project.hasProperty('xmlSpotBugsReport') && !project.hasProperty('xmlFindBugsReport'))
     }
+    maxHeapSize = "2g"
   }
 
   // Ignore core since its a scala project
@@ -533,11 +522,6 @@ def fineTuneEclipseClasspathFile(eclipse, project) {
   }
 }
 
-def checkstyleConfigProperties(configFileName) {
-  [importControlFile: "$rootDir/checkstyle/$configFileName",
-   suppressionsFile: "$rootDir/checkstyle/suppressions.xml",
-   headerFile: "$rootDir/checkstyle/java.header"]
-}
 
 // Aggregates all jacoco results into the root project directory
 task jacocoRootReport(type: org.gradle.testing.jacoco.tasks.JacocoReport) {
@@ -900,9 +884,6 @@ project(':core') {
 
   systemTestLibs.dependsOn('jar', 'testJar', 'copyDependantTestLibs')
 
-  checkstyle {
-    configProperties = checkstyleConfigProperties("import-control-core.xml")
-  }
 }
 
 project(':examples') {
@@ -916,9 +897,6 @@ project(':examples') {
     enabled = false
   }
 
-  checkstyle {
-    configProperties = checkstyleConfigProperties("import-control-core.xml")
-  }
 }
 
 project(':generator') {
@@ -967,6 +945,8 @@ project(':clients') {
     testRuntime libs.jacksonDatabind
     testRuntime libs.jacksonJDK8Datatypes
     testCompile libs.jacksonJaxrsJsonProvider
+
+    compile group: 'com.aphyr', name: 'riemann-java-client', version: '0.2.2'
   }
 
   task determineCommitId {
@@ -1491,10 +1471,6 @@ project(':jmh-benchmarks') {
     }
   }
 
-  checkstyle {
-    configProperties = checkstyleConfigProperties("import-control-jmh-benchmarks.xml")
-  }
-
   task jmh(type: JavaExec, dependsOn: [':jmh-benchmarks:clean', ':jmh-benchmarks:shadowJar']) {
 
     main="-jar"
@@ -1834,6 +1810,9 @@ project(':connect:mirror') {
     compile project(':clients')
     compile libs.argparse4j
     compile libs.slf4jApi
+    compile group: 'com.aphyr', name: 'riemann-java-client', version: '0.2.2'
+    compile group: 'com.yammer.metrics', name: 'metrics-core', version: '2.2.0'
+    compile group: 'com.googlecode.json-simple', name: 'json-simple', version: '1.1'
 
     testCompile libs.junit
     testCompile project(':clients').sourceSets.test.output

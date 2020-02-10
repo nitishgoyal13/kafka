@@ -141,6 +141,8 @@ public class MirrorSourceTask extends SourceTask {
                 sourceRecords.add(converted);
                 TopicPartition topicPartition = new TopicPartition(converted.topic(), converted.kafkaPartition());
                 metrics.recordAge(topicPartition, System.currentTimeMillis() - record.timestamp());
+                metrics.replicationLatency(topicPartition, System.currentTimeMillis() - record.timestamp(), converted);
+                metrics.recordOffset(topicPartition, converted);
                 metrics.recordBytes(topicPartition, byteSize(record.value()));
             }
             if (sourceRecords.isEmpty()) {
@@ -177,7 +179,8 @@ public class MirrorSourceTask extends SourceTask {
             TopicPartition topicPartition = new TopicPartition(record.topic(), record.kafkaPartition());
             long latency = System.currentTimeMillis() - record.timestamp();
             metrics.countRecord(topicPartition);
-            metrics.replicationLatency(topicPartition, latency);
+            metrics.replicationLatency(topicPartition, latency, record);
+            metrics.recordOffset(topicPartition, record);
             TopicPartition sourceTopicPartition = MirrorUtils.unwrapPartition(record.sourcePartition());
             long upstreamOffset = MirrorUtils.unwrapOffset(record.sourceOffset());
             long downstreamOffset = metadata.offset();
