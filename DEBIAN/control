@@ -1,4 +1,4 @@
-Package: kafka_mm2
+Package: kafka
 Version: 2.4
 Architecture: all
 Description: Kafka-mm2
