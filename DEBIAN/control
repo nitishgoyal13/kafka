@@ -1,5 +1,5 @@
 Package: kafka
-Version: __VERSION__
+Version: 2.4
 Architecture: all
 Description: Kafka-mm2
 Maintainer: nitish.goyal
