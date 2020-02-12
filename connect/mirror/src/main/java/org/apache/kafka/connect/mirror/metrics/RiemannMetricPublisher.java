@@ -173,7 +173,7 @@ public class RiemannMetricPublisher implements AutoCloseable {
 
         Runnable task = () -> {
             try {
-                LOGGER.info("Executing runnable task");
+                LOGGER.debug("Executing runnable task");
                 REPLICATION_LATENCY_METRIC_MAP.forEach((topicPartition, metricValue) -> {
                     try {
                         Measurable metric = getTimestampDiff(metricValue);
@@ -209,7 +209,6 @@ public class RiemannMetricPublisher implements AutoCloseable {
                     }
                 });
                 if (replicationLatency != null) {
-                    LOGGER.info("Logging replicationLatency : {} ", replicationLatency.getConsumerRecord());
                     try {
                         Measurable metric = getTimestampDiff(replicationLatency);
                         replicationLatency.getKafkaMetric().setMetricValueProvider(metric);

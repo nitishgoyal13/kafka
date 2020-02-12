@@ -40,7 +40,7 @@ public class RiemannReporter implements MetricsReporter {
         Proto.Event.Builder builder = buildEvent(metric);
         if (metric.metricValue() instanceof Double && (Double) metric.metricValue() > 0d) {
             MetricName metricName = metric.metricName();
-            LOGGER.info("MetricName : {} Group: {} Value : {} ",
+            LOGGER.debug("MetricName : {} Group: {} Value : {} ",
                     metricName.name(), metricName.group(), metric.metricValue());
             Proto.Event event = builder.setMetricD((Double) metric.metricValue())
                     .addAttributes(buildMetricTypeAttribute("meter"))
