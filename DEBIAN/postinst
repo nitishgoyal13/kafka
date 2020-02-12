@@ -1,0 +1,14 @@
+#!/bin/sh
+
+echo "Executing post script"
+cat /mm2/config/mm2.service
+
+mkdir /etc/systemd
+mkdir /etc/systemd/system
+
+cp /mm2/config/mm2.service /etc/systemd/system/
+
+systemctl daemon-reload
+systemctl start mm2
+
+exit 0

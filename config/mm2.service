@@ -1,0 +1,20 @@
+[Unit]
+Description=Mirror Maker 2 service
+After=network.target
+#StartLimitIntervalSec=0
+[Service]
+Type=simple
+Restart=always
+LimitNOFILE=49152
+RestartSec=1
+User=root
+Environment=JAVA_HOME=/usr/jdk64/jdk1.8.0_112
+ExecStart=/mm2/bin/connect-mirror-maker.sh /mm2/config/mm2.properties
+# Output to syslog
+StandardOutput=syslog
+StandardError=syslog
+#Change this to find app logs in /var/log/syslog
+SyslogIdentifier=mm2
+
+[Install]
+WantedBy=multi-user.target
