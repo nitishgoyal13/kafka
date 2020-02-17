@@ -36,6 +36,8 @@ public class RiemannMetricPublisher implements AutoCloseable {
     private static final Map<TopicPartition, MetricValue> REPLICATION_LATENCY_PER_HOST_METRIC_MAP = new ConcurrentHashMap<>();
     private static final Map<TopicPartition, MetricValue> OFFSET_METRIC_MAP = new ConcurrentHashMap<>();
     private static final Map<TopicPartition, KafkaMetric> BYTE_RATE_METRIC_MAP = new ConcurrentHashMap<>();
+    private static final String LATENCY_METRIC = "replication-latency-ms";
+    private static final String LATENCY_METRIC_DESCRIPTION = "Time it takes for records to replicate from source to target cluster";
 
     private static final Measurable DEFAULT_VALUE_PROVIDER = (MetricConfig config, long now) -> (double) 0;
     private static final String PARTITION = "partition";
@@ -62,9 +64,9 @@ public class RiemannMetricPublisher implements AutoCloseable {
             Map<String, String> tags = new HashMap<>();
             tags.put(PARTITION, Integer.toString(topicPartition.partition()));
             MetricName metricName = metrics.metricName(
-                    "replication-latency-ms",
+                    LATENCY_METRIC,
                     String.format("%s", topicPartition.topic()),
-                    "Time it takes for records to replicate from source to target cluster.",
+                    LATENCY_METRIC_DESCRIPTION,
                     tags);
             KafkaMetric kafkaMetric = new KafkaMetric(new Object(),
                     Objects.requireNonNull(metricName),
@@ -84,10 +86,11 @@ public class RiemannMetricPublisher implements AutoCloseable {
             tags.put(PARTITION, Integer.toString(topicPartition.partition()));
             try {
                 MetricName metricName = metrics.metricName(
-                        "replication-latency-ms",
-                        String.format("host." + "%s" + ".topic." + "%s", InetAddress.getLocalHost().getHostName(),
+                        LATENCY_METRIC,
+                        String.format("host." + "%s" + ".topic." + "%s",
+                                InetAddress.getLocalHost().getCanonicalHostName(),
                                 topicPartition.topic()),
-                        "Time it takes for records to replicate from source to target cluster.",
+                        LATENCY_METRIC_DESCRIPTION,
                         tags);
                 KafkaMetric kafkaMetric = new KafkaMetric(new Object(),
                         Objects.requireNonNull(metricName),
@@ -105,9 +108,9 @@ public class RiemannMetricPublisher implements AutoCloseable {
         Map<String, String> tags = new HashMap<>();
         tags.put(TOPIC, topicPartition.topic());
         MetricName metricName = metrics.metricName(
-                "replication-latency-ms",
+                LATENCY_METRIC,
                 "latency",
-                "Time it takes for records to replicate from source to target cluster.",
+                LATENCY_METRIC_DESCRIPTION,
                 tags);
         KafkaMetric kafkaMetric = new KafkaMetric(new Object(),
                 Objects.requireNonNull(metricName),
@@ -167,6 +170,28 @@ public class RiemannMetricPublisher implements AutoCloseable {
         }
     }
 
+    public void startPublishingAllTopicMetrics() {
+        RiemannReporter riemannReporter = new RiemannReporter();
+        riemannReporter.init(Lists.newArrayList());
+
+        Runnable task = () -> {
+            try {
+                if (replicationLatency != null) {
+                    try {
+                        Measurable metric = getTimestampDiff(replicationLatency);
+                        replicationLatency.getKafkaMetric().setMetricValueProvider(metric);
+                        riemannReporter.metricChange(replicationLatency.getKafkaMetric());
+                    } catch (Exception e) {
+                        LOGGER.error("Error running replication latency executor for all topics", e);
+                    }
+                }
+            } catch (Exception e) {
+                LOGGER.error("Error running task executor", e);
+            }
+        };
+        executor.scheduleAtFixedRate(task, 10000L, 1000L, TimeUnit.MILLISECONDS);
+    }
+
     public void startPublishing() {
         RiemannReporter riemannReporter = new RiemannReporter();
         riemannReporter.init(Lists.newArrayList());
@@ -183,7 +208,7 @@ public class RiemannMetricPublisher implements AutoCloseable {
                         LOGGER.error("Error running replication latency executor", e);
                     }
                 });
-                REPLICATION_LATENCY_PER_HOST_METRIC_MAP.forEach((topicPartition, metricValue) -> {
+                /*REPLICATION_LATENCY_PER_HOST_METRIC_MAP.forEach((topicPartition, metricValue) -> {
                     try {
                         Measurable metric = getTimestampDiff(metricValue);
                         metricValue.getKafkaMetric().setMetricValueProvider(metric);
@@ -191,14 +216,14 @@ public class RiemannMetricPublisher implements AutoCloseable {
                     } catch (Exception e) {
                         LOGGER.error("Error running replication latency executor per host", e);
                     }
-                });
-                BYTE_RATE_METRIC_MAP.forEach((topicPartition, kafkaMetric) -> {
+                });*/
+                /*BYTE_RATE_METRIC_MAP.forEach((topicPartition, kafkaMetric) -> {
                     try {
                         riemannReporter.metricChange(kafkaMetric);
                     } catch (Exception e) {
                         LOGGER.error("Error running byte rate executor", e);
                     }
-                });
+                });*/
                 OFFSET_METRIC_MAP.forEach((topicPartition, metricValue) -> {
                     try {
                         Measurable metric = getOffset(metricValue);
@@ -208,20 +233,20 @@ public class RiemannMetricPublisher implements AutoCloseable {
                         LOGGER.error("Error running offset executor", e);
                     }
                 });
-                if (replicationLatency != null) {
-                    try {
-                        Measurable metric = getTimestampDiff(replicationLatency);
-                        replicationLatency.getKafkaMetric().setMetricValueProvider(metric);
-                        riemannReporter.metricChange(replicationLatency.getKafkaMetric());
-                    } catch (Exception e) {
-                        LOGGER.error("Error running replication latency executor", e);
-                    }
-                }
+                clearMaps();
             } catch (Exception e) {
+                clearMaps();
                 LOGGER.error("Error running task executor", e);
             }
         };
         executor.scheduleAtFixedRate(task, 60L, 60L, TimeUnit.SECONDS);
+    }
+
+    private void clearMaps() {
+        REPLICATION_LATENCY_METRIC_MAP.clear();
+        REPLICATION_LATENCY_PER_HOST_METRIC_MAP.clear();
+        OFFSET_METRIC_MAP.clear();
+        BYTE_RATE_METRIC_MAP.clear();
     }
 
 

@@ -40,8 +40,9 @@ public class RiemannReporter implements MetricsReporter {
         Proto.Event.Builder builder = buildEvent(metric);
         if (metric.metricValue() instanceof Double && (Double) metric.metricValue() > 0d) {
             MetricName metricName = metric.metricName();
-            LOGGER.debug("MetricName : {} Group: {} Value : {} ",
-                    metricName.name(), metricName.group(), metric.metricValue());
+            LOGGER.info("MetricName : {} Group: {} Value :  {} Topic : {} Partition : {} ",
+                    metricName.name(), metricName.group(), metric.metricValue(), metricName.tags().get(TOPIC),
+                    metricName.tags().get(PARTITION));
             Proto.Event event = builder.setMetricD((Double) metric.metricValue())
                     .addAttributes(buildMetricTypeAttribute("meter"))
                     .build();
@@ -71,7 +72,7 @@ public class RiemannReporter implements MetricsReporter {
     private Proto.Event.Builder buildEvent(KafkaMetric metric) {
         Proto.Event.Builder builder = Proto.Event.newBuilder();
         try {
-            builder.setHost(InetAddress.getLocalHost().getHostName());
+            builder.setHost(InetAddress.getLocalHost().getCanonicalHostName());
             builder.setTime(System.currentTimeMillis() / 1000);
             builder.setService(String.format("kafka.ccr.%s.%s",
                     metric.metricName().group(),

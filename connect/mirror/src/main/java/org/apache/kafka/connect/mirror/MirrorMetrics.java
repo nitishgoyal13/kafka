@@ -111,6 +111,7 @@ class MirrorMetrics implements AutoCloseable {
         this.metrics = new Metrics();
         this.riemannMetricPublisher = new RiemannMetricPublisher();
         riemannMetricPublisher.startPublishing();
+        riemannMetricPublisher.startPublishingAllTopicMetrics();
 
         // for side-effect
         metrics.sensor("record-count");
