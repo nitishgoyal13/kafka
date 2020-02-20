@@ -35,13 +35,12 @@ buildscript {
     // For Apache Rat plugin to ignore non-Git files
     classpath "org.ajoberstar.grgit:grgit-core:$versions.grgit"
     classpath "com.github.ben-manes:gradle-versions-plugin:$versions.gradleVersionsPlugin"
-    classpath "org.scoverage:gradle-scoverage:$versions.scoveragePlugin"
     classpath "com.github.jengelman.gradle.plugins:shadow:$versions.shadowPlugin"
     classpath "org.owasp:dependency-check-gradle:$versions.owaspDepCheckPlugin"
     classpath "com.diffplug.spotless:spotless-plugin-gradle:$versions.spotlessPlugin"
-    classpath "com.github.spotbugs:spotbugs-gradle-plugin:$versions.spotbugsPlugin"
     classpath 'com.netflix.nebula:nebula-clojure-plugin:4.0.1'
     classpath 'clojuresque:clojuresque:1.7.0'
+
   }
 }
 
@@ -134,14 +133,6 @@ apply from: file('wrapper.gradle')
 
 
 subprojects {
-
-  // enable running :dependencies task recursively on all subprojects
-  // eg: ./gradlew allDeps
-  task allDeps(type: DependencyReportTask) {}
-  // enable running :dependencyInsight task recursively on all subprojects
-  // eg: ./gradlew allDepInsight --configuration runtime --dependency com.fasterxml.jackson.core:jackson-databind
-  task allDepInsight(type: DependencyInsightReportTask) doLast {}
-
   apply plugin: 'java'
   // apply the eclipse plugin only to subprojects that hold code. 'connect' is just a folder.
   if (!project.name.equals('connect')) {
@@ -150,7 +141,7 @@ subprojects {
   }
   apply plugin: 'maven'
   apply plugin: 'signing'
-  apply plugin: "com.github.spotbugs"
+
 
   sourceCompatibility = minJavaVersion
   targetCompatibility = minJavaVersion
@@ -445,21 +436,6 @@ subprojects {
     }
   }
 
-  spotbugs {
-    toolVersion = "$versions.spotbugs"
-    excludeFilter = file("$rootDir/gradle/spotbugs-exclude.xml")
-    ignoreFailures = false
-  }
-  test.dependsOn('spotbugsMain')
-
-  tasks.withType(com.github.spotbugs.SpotBugsTask) {
-    reports {
-      // Continue supporting `xmlFindBugsReport` for compatibility
-      xml.enabled(project.hasProperty('xmlSpotBugsReport') || project.hasProperty('xmlFindBugsReport'))
-      html.enabled(!project.hasProperty('xmlSpotBugsReport') && !project.hasProperty('xmlFindBugsReport'))
-    }
-    maxHeapSize = "2g"
-  }
 
   // Ignore core since its a scala project
   if (it.path != ':core') {
@@ -483,9 +459,6 @@ subprojects {
     }
   }
 
-  def coverageGen = it.path == ':core' ? 'reportScoverage' : 'jacocoTestReport'
-  task reportCoverage(dependsOn: [coverageGen])
-
   task determineCommitId {
     def takeFromHash = 16
     if (commitId) {
@@ -507,11 +480,7 @@ subprojects {
 
 }
 
-gradle.taskGraph.whenReady { taskGraph ->
-  taskGraph.getAllTasks().findAll { it.name.contains('spotbugsScoverage') || it.name.contains('spotbugsTest') }.each { task ->
-    task.enabled = false
-  }
-}
+
 
 def fineTuneEclipseClasspathFile(eclipse, project) {
   eclipse.classpath.file {
@@ -552,10 +521,10 @@ task jacocoRootReport(type: org.gradle.testing.jacoco.tasks.JacocoReport) {
   description = 'Generates an aggregate report from all subprojects'
   dependsOn(javaProjects.test)
 
-  additionalSourceDirs.from = javaProjects.sourceSets.main.allSource.srcDirs
-  sourceDirectories.from = javaProjects.sourceSets.main.allSource.srcDirs
-  classDirectories.from = javaProjects.sourceSets.main.output
-  executionData.from = javaProjects.jacocoTestReport.executionData
+  additionalSourceDirs = files(javaProjects.sourceSets.main.allSource.srcDirs)
+  sourceDirectories = files(javaProjects.sourceSets.main.allSource.srcDirs)
+  classDirectories =  files(javaProjects.sourceSets.main.output)
+  executionData = files(javaProjects.jacocoTestReport.executionData)
 
   reports {
     html.enabled = true
@@ -664,7 +633,6 @@ project(':core') {
   println "Building project 'core' with Scala version ${versions.scala}"
 
   apply plugin: 'scala'
-  apply plugin: "org.scoverage"
   archivesBaseName = "kafka_${versions.baseScala}"
 
   dependencies {
@@ -716,12 +684,6 @@ project(':core') {
     testCompile libs.jfreechart
   }
 
-  scoverage {
-    scoverageVersion = "$versions.scoverage"
-    reportDir = file("${rootProject.buildDir}/scoverage")
-    highlighting = false
-    minimumRate = 0.0
-  }
 
   configurations {
     // manually excludes some unnecessary dependencies
@@ -1463,14 +1425,6 @@ project(':streams:upgrade-system-tests-24') {
 }
 
 project(':jmh-benchmarks') {
-
-  apply plugin: 'com.github.johnrengelman.shadow'
-
-  shadowJar {
-    baseName = 'kafka-jmh-benchmarks-all'
-    classifier = null
-    version = null
-  }
 
   dependencies {
     compile project(':core')

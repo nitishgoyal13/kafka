@@ -1,8 +1,8 @@
 package org.apache.kafka.connect.mirror.metrics;
 
-import com.google.common.collect.Lists;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -172,7 +172,7 @@ public class RiemannMetricPublisher implements AutoCloseable {
 
     public void startPublishingAllTopicMetrics() {
         RiemannReporter riemannReporter = new RiemannReporter();
-        riemannReporter.init(Lists.newArrayList());
+        riemannReporter.init(new ArrayList<>());
 
         Runnable task = () -> {
             try {
@@ -194,7 +194,7 @@ public class RiemannMetricPublisher implements AutoCloseable {
 
     public void startPublishing() {
         RiemannReporter riemannReporter = new RiemannReporter();
-        riemannReporter.init(Lists.newArrayList());
+        riemannReporter.init(new ArrayList<>());
 
         Runnable task = () -> {
             try {

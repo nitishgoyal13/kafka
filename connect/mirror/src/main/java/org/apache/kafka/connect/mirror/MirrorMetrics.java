@@ -161,7 +161,7 @@ class MirrorMetrics implements AutoCloseable {
     void recordBytes(TopicPartition topicPartition, long bytes) {
         Measurable metricValue = (MetricConfig config, long now) -> (double) bytes;
         riemannMetricPublisher.addRecordBytesMetric(topicPartition, metricValue);
-        partitionMetrics.get(topicPartition).byteRateSensor.record((double) bytes);
+        partitionMetrics.get(topicPartition).byteSensor.record((double) bytes);
     }
 
     void recordOffset(TopicPartition topicPartition, SourceRecord record) {
@@ -187,7 +187,6 @@ class MirrorMetrics implements AutoCloseable {
         private final Sensor byteSensor;
         private final Sensor recordAgeSensor;
         private final Sensor replicationLatencySensor;
-        private final TopicPartition topicPartition;
 
         PartitionMetrics(TopicPartition topicPartition) {
             String prefix = topicPartition.topic() + "-" + topicPartition.partition() + "-";
