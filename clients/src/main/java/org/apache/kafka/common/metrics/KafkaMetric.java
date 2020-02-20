@@ -25,7 +25,7 @@ public final class KafkaMetric implements Metric {
     private MetricName metricName;
     private final Object lock;
     private final Time time;
-    private final MetricValueProvider<?> metricValueProvider;
+    private MetricValueProvider<?> metricValueProvider;
     private MetricConfig config;
 
     // public for testing
@@ -91,5 +91,11 @@ public final class KafkaMetric implements Metric {
         synchronized (lock) {
             this.config = config;
         }
+    }
+
+    public void setMetricValueProvider(MetricValueProvider<?> valueProvider) {
+        if (!(valueProvider instanceof Measurable) && !(valueProvider instanceof Gauge))
+            throw new IllegalArgumentException("Unsupported metric value provider of class " + valueProvider.getClass());
+        this.metricValueProvider = valueProvider;
     }
 }
