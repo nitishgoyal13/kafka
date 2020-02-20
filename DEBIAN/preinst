@@ -2,6 +2,4 @@
 
 echo "Executing pre install script"
 
-sudo service mm2 stop
-
-sudo dpkg --remove /mm2
+service mm2 stop || true

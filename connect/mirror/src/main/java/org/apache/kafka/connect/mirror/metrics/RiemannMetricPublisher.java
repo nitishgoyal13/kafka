@@ -198,7 +198,7 @@ public class RiemannMetricPublisher implements AutoCloseable {
 
         Runnable task = () -> {
             try {
-                LOGGER.debug("Executing runnable task");
+                LOGGER.info("Executing runnable task");
                 REPLICATION_LATENCY_METRIC_MAP.forEach((topicPartition, metricValue) -> {
                     try {
                         Measurable metric = getTimestampDiff(metricValue);
@@ -208,7 +208,7 @@ public class RiemannMetricPublisher implements AutoCloseable {
                         LOGGER.error("Error running replication latency executor", e);
                     }
                 });
-                /*REPLICATION_LATENCY_PER_HOST_METRIC_MAP.forEach((topicPartition, metricValue) -> {
+                REPLICATION_LATENCY_PER_HOST_METRIC_MAP.forEach((topicPartition, metricValue) -> {
                     try {
                         Measurable metric = getTimestampDiff(metricValue);
                         metricValue.getKafkaMetric().setMetricValueProvider(metric);
@@ -216,15 +216,17 @@ public class RiemannMetricPublisher implements AutoCloseable {
                     } catch (Exception e) {
                         LOGGER.error("Error running replication latency executor per host", e);
                     }
-                });*/
-                /*BYTE_RATE_METRIC_MAP.forEach((topicPartition, kafkaMetric) -> {
+                });
+                BYTE_RATE_METRIC_MAP.forEach((topicPartition, kafkaMetric) -> {
                     try {
                         riemannReporter.metricChange(kafkaMetric);
                     } catch (Exception e) {
                         LOGGER.error("Error running byte rate executor", e);
                     }
-                });*/
+                });
+                LOGGER.info("Offset Metric map running");
                 OFFSET_METRIC_MAP.forEach((topicPartition, metricValue) -> {
+
                     try {
                         Measurable metric = getOffset(metricValue);
                         metricValue.getKafkaMetric().setMetricValueProvider(metric);
