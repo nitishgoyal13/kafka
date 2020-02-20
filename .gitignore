@@ -4,6 +4,7 @@ dist
 target/
 build_eclipse/
 out/
+build/
 .gradle/
 lib_managed/
 src_managed/
