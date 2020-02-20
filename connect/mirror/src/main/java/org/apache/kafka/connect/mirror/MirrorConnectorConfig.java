@@ -22,6 +22,7 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.metrics.MetricsReporter;
 import org.apache.kafka.common.metrics.JmxReporter;
 import org.apache.kafka.clients.CommonClientConfigs;
+import org.apache.kafka.common.metrics.riemann.RiemannReporter;
 import org.apache.kafka.connect.runtime.ConnectorConfig;
 
 import java.util.Map;
@@ -271,6 +272,7 @@ public class MirrorConnectorConfig extends AbstractConfig {
         List<MetricsReporter> reporters = getConfiguredInstances(
                 CommonClientConfigs.METRIC_REPORTER_CLASSES_CONFIG, MetricsReporter.class);
         reporters.add(new JmxReporter("kafka.connect.mirror"));
+        reporters.add(new RiemannReporter());
         return reporters;
     }
 

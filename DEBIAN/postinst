@@ -1,0 +1,36 @@
+#!/bin/sh
+
+echo "Executing post script"
+
+cat config/mm2.service
+
+mkdir -p /etc/systemd
+mkdir -p /etc/systemd/system
+cp config/mm2.service /etc/systemd/system/
+
+echo "Copying files"
+
+#mkdir -p /var/
+#mkdir -p /var/lib
+#mkdir -p /var/lib/mm2
+
+#cp -r . /var/lib/mm2
+
+mkdir -p /data
+mkdir -p /data/kafka
+mkdir -p /data/kafka/mm2
+
+cp -r * /data/kafka/mm2 || true
+
+mkdir -p /etc/mm2
+mkdir -p /etc/mm2/config
+cp config/* /etc/mm2/config/
+
+echo "Copy complete"
+
+echo "Starting mm2 service"
+
+systemctl daemon-reload
+systemctl start mm2
+
+exit 0
